@@ -1,0 +1,20 @@
+
+# macOS
+.DS_Store
+
+# config
+*.env
+
+# database
+
+# build artifacts
+bin/
+
+# test binaries and coverage
+tests/
+*.test
+coverage.out
+
+# assets, hls (generated)
+assets/
+hls/
