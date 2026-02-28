@@ -1,6 +1,7 @@
 #!/bin/bash
+set -euo pipefail
 
-mkdir -p hls
+mkdir -p hls/dev
 
 ffmpeg -y -i assets/sample.mp4 \
   -codec:v libx264 \
@@ -10,7 +11,7 @@ ffmpeg -y -i assets/sample.mp4 \
   -sc_threshold 0 \
   -hls_time 4 \
   -hls_playlist_type vod \
-  -hls_segment_filename "hls/segment_%03d.ts" \
-  hls/playlist.m3u8
+  -hls_segment_filename "hls/dev/segment_%03d.ts" \
+  hls/dev/playlist.m3u8
 
-echo "HLS generation complete."
+echo "HLS generation complete: ./hls/dev/playlist.m3u8"

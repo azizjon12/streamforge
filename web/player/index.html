@@ -1,23 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8" />
   <title>StreamForge Player</title>
 </head>
 <body>
-  <h2>StreamForge - Phase 1</h2>
-  <video id="video" controls width="800"></video>
+  <h2>StreamForge Player (Phase 2)</h2>
+  <p id="info"></p>
+  <video id="video" controls width="900"></video>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    const video = document.getElementById('video');
-    const videoSrc = '/hls/playlist.m3u8';
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
 
-    if (Hls.isSupported()) {
-      const hls = new Hls();
-      hls.loadSource(videoSrc);
-      hls.attachMedia(video);
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = videoSrc;
+    const info = document.getElementById("info");
+    if (!id) {
+      info.textContent = "Missing ?id=... Create a job via POST /v1/streams first.";
+    } else {
+      info.textContent = "Stream ID: " + id;
+    }
+
+    const video = document.getElementById("video");
+    const videoSrc = `/hls/${id}/playlist.m3u8`;
+
+    if (id) {
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(videoSrc);
+        hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = videoSrc;
+      }
     }
   </script>
 </body>
