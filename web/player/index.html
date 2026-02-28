@@ -3,36 +3,68 @@
 <head>
   <meta charset="utf-8" />
   <title>StreamForge Player</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .msg { margin: 12px 0; padding: 10px; border: 1px solid #ddd; border-radius: 8px; }
+  </style>
 </head>
 <body>
-  <h2>StreamForge Player (Phase 2)</h2>
-  <p id="info"></p>
-  <video id="video" controls width="900"></video>
+  <h2>StreamForge Player</h2>
+  <div id="msg" class="msg"></div>
+  <video id="video" controls width="900" style="display:none;"></video>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("id");
+    const msg = document.getElementById("msg");
+    const video = document.getElementById("video");
+    const id = new URLSearchParams(window.location.search).get("id");
 
-    const info = document.getElementById("info");
-    if (!id) {
-      info.textContent = "Missing ?id=... Create a job via POST /v1/streams first.";
-    } else {
-      info.textContent = "Stream ID: " + id;
+    const setMsg = (t) => msg.textContent = t;
+
+    async function manifestExists(url) {
+      // HEAD is ideal, but some servers don't handle it; GET is safe.
+      const res = await fetch(url, { method: "GET" });
+      return res.ok;
     }
 
-    const video = document.getElementById("video");
-    const videoSrc = `/hls/${id}/playlist.m3u8`;
+    async function main() {
+      if (!id) {
+        setMsg("Missing ?id=... Create a stream via POST /v1/streams first.");
+        return;
+      }
 
-    if (id) {
+      const manifest = `/hls/${id}/playlist.m3u8`;
+      setMsg(`Loading stream ${id}...`);
+
+      try {
+        const ok = await manifestExists(manifest);
+        if (!ok) {
+          setMsg(`Stream ${id} not found (it may have been deleted).`);
+          return;
+        }
+      } catch {
+        setMsg("Cannot reach server. Is it running?");
+        return;
+      }
+
+      video.style.display = "block";
+      setMsg(`Playing stream ${id}`);
+
       if (Hls.isSupported()) {
         const hls = new Hls();
-        hls.loadSource(videoSrc);
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          setMsg(`Playback error (${data.details || "unknown"}). The stream may have been deleted.`);
+        });
+        hls.loadSource(manifest);
         hls.attachMedia(video);
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = videoSrc;
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = manifest;
+      } else {
+        setMsg("This browser does not support HLS playback.");
       }
     }
+
+    main();
   </script>
 </body>
 </html>

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,7 +30,8 @@ func NewHandler(q Queue, store *JobStore, st *storage.LocalStorage) *Handler {
 
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/streams", h.CreateStream)
-	mux.HandleFunc("GET /v1/streams/", h.GetStream) // /v1/streams/{id}
+	mux.HandleFunc("GET /v1/streams/", h.GetStream)       // /v1/streams/{id}
+	mux.HandleFunc("DELETE /v1/streams/", h.DeleteStream) // /v1/streams/{id}
 }
 
 func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +106,42 @@ func (h *Handler) GetStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, GetStreamResponse{StreamJob: job})
+}
+
+func (h *Handler) DeleteStream(w http.ResponseWriter, r *http.Request) {
+	// Extract ID from path: /v1/streams/{id}
+	id := strings.TrimPrefix(r.URL.Path, "/v1/streams/")
+	id = strings.TrimSpace(id)
+
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is missing"})
+		return
+	}
+
+	job, ok := h.Store.Get(id)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	// Do not delete while processing
+	if job.Status == StausProcessing {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot delete while processing"})
+		return
+	}
+
+	// Remove local HLS directory: ./hls/{id}
+	outputDir := h.Storage.OutputDir(id)
+	if err := os.RemoveAll(outputDir); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove output directory"})
+		return
+	}
+
+	// Mark as deleted in memory store
+	h.Store.UpdateStatus(id, StatusDeleted, "")
+
+	// 204 is standard REST delete response
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

@@ -9,6 +9,7 @@ const (
 	StausProcessing StreamStatus = "processing"
 	StatusReady     StreamStatus = "ready"
 	StatusFailed    StreamStatus = "failed"
+	StatusDeleted   StreamStatus = "deleted"
 )
 
 type StreamJob struct {
