@@ -19,13 +19,21 @@ type Queue interface {
 }
 
 type Handler struct {
-	Queue   Queue
-	Store   *JobStore
-	Storage *storage.LocalStorage
+	Queue            Queue
+	Store            *JobStore
+	Storage          *storage.LocalStorage
+	CloudFrontDomain string
+	S3Prefix         string
 }
 
-func NewHandler(q Queue, store *JobStore, st *storage.LocalStorage) *Handler {
-	return &Handler{Queue: q, Store: store, Storage: st}
+func NewHandler(q Queue, store *JobStore, st *storage.LocalStorage, cloudFrontDomain, s3Prefix string) *Handler {
+	return &Handler{
+		Queue:            q,
+		Store:            store,
+		Storage:          st,
+		CloudFrontDomain: cloudFrontDomain,
+		S3Prefix:         s3Prefix,
+	}
 }
 
 func (h *Handler) Register(mux *http.ServeMux) {
@@ -62,14 +70,20 @@ func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	playbackURL := h.Storage.PlaylistPath(id)
+	if h.CloudFrontDomain != "" {
+		playbackURL = storage.CloudFrontPlaylistURL(h.CloudFrontDomain, h.S3Prefix, id)
+	}
+
 	job := StreamJob{
 		ID:          id,
 		Input:       req.Input,
 		OutputDir:   h.Storage.OutputDir(id),
-		PlaylistURL: h.Storage.PlaylistPath(id),
+		PlaylistURL: playbackURL,
 		Status:      StatusQueued,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
+		// PlaylistURL: storage.CloudFrontPlaylistURL(os.Getenv("STREAMFORGE_CLOUDFRONT_DOMAIN"), os.Getenv("STREAMFORGE_S3_PREFIX"), id),
 	}
 
 	h.Store.Put(job)
@@ -125,7 +139,7 @@ func (h *Handler) DeleteStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Do not delete while processing
-	if job.Status == StausProcessing {
+	if job.Status == StatusProcessing {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot delete while processing"})
 		return
 	}

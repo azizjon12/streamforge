@@ -7,6 +7,9 @@ import (
 	"os"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/azizjon12/streamforge/internal/api"
 	"github.com/azizjon12/streamforge/internal/encoding"
 	"github.com/azizjon12/streamforge/internal/queue"
@@ -16,13 +19,19 @@ import (
 func main() {
 	mux := http.NewServeMux()
 
-	// Phase 2: local storage + in-memory store + in-memory queue
+	// Phase 2 foundation: local storage + in-memory store + in-memory queue
 	st := storage.NewLocalStorage("./hls")
 	store := api.NewJobStore()
 	q := queue.NewMemoryQueue(100)
 
+	// Phase 3 config
+	awsRegion := os.Getenv("AWS_REGION")
+	bucket := os.Getenv("STREAMFORGE_S3_BUCKET")
+	prefix := os.Getenv("STREAMFORGE_S3_PREFIX")
+	cloudFrontDomain := os.Getenv("STREAMFORGE_CLOUDFRONT_DOMAIN")
+
 	// API handlers
-	h := api.NewHandler(q, store, st)
+	h := api.NewHandler(q, store, st, cloudFrontDomain, prefix)
 	h.Register(mux)
 
 	// Serve generated HLS files
@@ -39,19 +48,38 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
+	// S3 uploader
+	var uploader *storage.S3Uploader
+	if awsRegion != "" && bucket != "" && cloudFrontDomain != "" {
+		cfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(awsRegion))
+		if err != nil {
+			log.Fatalf("failed to log AWS config: %v", err)
+		}
+
+		s3Client := s3.NewFromConfig(cfg)
+		uploader = storage.NewS3Uploader(bucket, prefix, s3Client)
+
+		log.Printf("phase 3 enabled: S3 bucket=%s prefix=%s CloudFront=%s", bucket, prefix, cloudFrontDomain)
+	} else {
+		log.Printf("phase 3 disabled: set STREAMFORGE_S3_BUCKET and STREAMFORGE_CLOUDFRONT_DOMAIN to enable S3 + CloudFront publishing")
+	}
+
 	// Start encoder worker IN-PROCESS for Phase 2 local demo.
 	// In future versions, we will externalize the queue (NATS/SQS/Kafka) and run worker separately
 	ff := encoding.NewFFmpeg("ffmpeg", encoding.DefaultHLSPreset())
+	workerLogger := log.New(os.Stdout, "worker", log.LstdFlags)
+
 	worker := &encoding.Worker{
-		Queue:   q,
-		Store:   store,
-		FFmpeg:  ff,
-		Logger:  log.New(os.Stdout, "worker ", log.LstdFlags),
-		Timeout: 10 * time.Minute,
+		Queue:    q,
+		Store:    store,
+		FFmpeg:   ff,
+		Uploader: uploader,
+		Logger:   workerLogger,
+		Timeout:  10 * time.Minute,
 	}
 	go func() {
 		if err := worker.Run(context.Background()); err != nil {
-			log.Fatal(err)
+			log.Fatalf("worker stopped: %v", err)
 		}
 	}()
 

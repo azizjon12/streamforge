@@ -5,11 +5,11 @@ import "time"
 type StreamStatus string
 
 const (
-	StatusQueued    StreamStatus = "queued"
-	StausProcessing StreamStatus = "processing"
-	StatusReady     StreamStatus = "ready"
-	StatusFailed    StreamStatus = "failed"
-	StatusDeleted   StreamStatus = "deleted"
+	StatusQueued     StreamStatus = "queued"
+	StatusProcessing StreamStatus = "processing"
+	StatusReady      StreamStatus = "ready"
+	StatusFailed     StreamStatus = "failed"
+	StatusDeleted    StreamStatus = "deleted"
 )
 
 type StreamJob struct {
